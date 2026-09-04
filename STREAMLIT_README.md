@@ -24,3 +24,7 @@ Without a Gemini key, the app stays usable with local fallback replies so the UI
 The Streamlit deployment must use a persistent writable filesystem for the SQLite database. Streamlit Community Cloud provides this during a running app, but its local filesystem is not a permanent database across app restarts. For durable lobby and chat history, replace the SQLite functions with a hosted database.
 
 The sidebar uses explicit dark-theme colors, so its labels, inputs, select box, and buttons remain visible when the app is in dark mode.
+
+## Slash commands
+
+The chat supports `/mode`, `/mode PersonaName`, `/summarize`, `/help`, `/leave`, `/disconnect`, and `/new`. The sidebar also restores chat JSON export/import and the Instagram distraction-free userscript helper.

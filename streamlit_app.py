@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import secrets
 import sqlite3
 import threading
@@ -33,6 +34,23 @@ MODE_SECTIONS = {
     "Comedy Trickster": "🤡 Comedy Trickster 3.0",
     "Neutral": "📌 Neutral 3.0",
 }
+
+INSTAGRAM_USERSCRIPT = """// ==UserScript==
+// @name         Distraction Free Instagram
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Hide Reels and Explore from Instagram to focus on DMs and Feed
+// @match        https://www.instagram.com/*
+// @grant        none
+// ==/UserScript==
+(function() {
+  'use strict';
+  const hide = () => {
+    document.querySelectorAll('a[href*="/reels/"], a[href*="/explore/"], [aria-label="Reels"]').forEach((el) => el.style.display = 'none');
+  };
+  hide();
+  new MutationObserver(hide).observe(document.body, { childList: true, subtree: true });
+})();"""
 
 
 def utc_now() -> str:
@@ -174,16 +192,14 @@ def save_message(room_id: str, sender_id: str, sender_name: str, original: str, 
 
 def load_prompts() -> Dict[str, str]:
     raw = PROMPT_FILE.read_text(encoding="utf-8") if PROMPT_FILE.exists() else ""
-    prompts: Dict[str, str] = {}
-    headings = list(MODE_SECTIONS.values())
-    for label, heading in MODE_SECTIONS.items():
-        start = raw.find(heading)
-        if start < 0:
-            prompts[label] = raw
-            continue
-        positions = [raw.find(next_heading, start + len(heading)) for next_heading in headings]
-        ends = [position for position in positions if position >= 0]
-        prompts[label] = raw[start : min(ends) if ends else len(raw)].strip()
+    prompts: Dict[str, str] = {label: "" for label in MODE_SECTIONS}
+    lines = raw.splitlines()
+    heading_rows = [(index, label) for index, line in enumerate(lines) for label, heading in MODE_SECTIONS.items() if line.startswith(heading)]
+    for position, (start_row, label) in enumerate(heading_rows):
+        end_row = heading_rows[position + 1][0] if position + 1 < len(heading_rows) else len(lines)
+        selected = "\n".join(lines[start_row:end_row]).strip()
+        # The selected prompt must contain only this mode's section.
+        prompts[label] = selected
     return prompts
 
 
@@ -230,6 +246,24 @@ def generate_reply(text: str, mode: str, history: list[dict[str, str]]) -> tuple
         return fallback_reply(text, mode), "Gemini returned an empty response; using a local fallback."
     except Exception as exc:
         return fallback_reply(text, mode), f"Gemini request failed: {type(exc).__name__}. Check your Streamlit secret and model access."
+
+
+def summarize_history(history: list[dict[str, str]]) -> tuple[str, str | None]:
+    if not history:
+        return "Abhi summarize karne ke liye koi messages nahi hain.", None
+    client = get_client()
+    context = "\n".join(f"{item['role']}: {item['content']}" for item in history[-20:])
+    if client is None:
+        return f"Short summary: {len(history)} messages exchanged. Main vibe: casual Hinglish chat in {st.session_state.mode} mode.", "GEMINI_API_KEY is not configured; using a local summary."
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=f"Summarize this chat in 3 short, simple Hinglish points.\n\n{context}",
+            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=250),
+        )
+        return (response.text or "No summary available.").strip(), None
+    except Exception as exc:
+        return f"Short summary: {len(history)} messages exchanged.", f"Summary request failed: {type(exc).__name__}."
 
 
 def init_state() -> None:
@@ -296,6 +330,25 @@ def main() -> None:
             st.session_state.user_id = uuid.uuid4().hex
             st.session_state.room_id = None
             st.rerun()
+        st.divider()
+        with st.expander("Session tools"):
+            if st.session_state.room_id:
+                export_data = {
+                    "room_code": st.session_state.room_code,
+                    "messages": load_messages(st.session_state.room_id, st.session_state.user_id),
+                }
+                st.download_button("Export chat JSON", json.dumps(export_data, ensure_ascii=False, indent=2), file_name="ai-chat-session.json", mime="application/json", use_container_width=True)
+            uploaded = st.file_uploader("Import chat JSON", type=["json"], help="Loads a local copy for reference; it does not overwrite the shared room.")
+            if uploaded is not None:
+                try:
+                    imported = json.load(uploaded)
+                    st.success(f"Loaded {len(imported.get('messages', []))} saved messages for reference.")
+                except (json.JSONDecodeError, AttributeError):
+                    st.error("That file is not a valid chat JSON export.")
+        with st.expander("Instagram distraction-free helper"):
+            st.caption("Instagram may block embedding. Install Tampermonkey, create a script, and paste this helper.")
+            st.code(INSTAGRAM_USERSCRIPT, language="javascript")
+            st.link_button("Open Instagram", "https://www.instagram.com/", use_container_width=True)
 
     st.markdown(f"<div class='hero'><h1>✨ AI Chat Middleman</h1><p>Private two-way chat · {st.session_state.mode} · {st.session_state.name}</p></div>", unsafe_allow_html=True)
 
@@ -346,8 +399,37 @@ def main() -> None:
         prompt = st.chat_input("Type your message…", key="chat_input")
         if prompt and prompt.strip():
             text = prompt.strip()
-            if text == "/mode":
-                st.info("Choose a persona from the sidebar.")
+            if text.startswith("/"):
+                command, _, argument = text.partition(" ")
+                command = command.lower()
+                if command == "/mode":
+                    if argument.strip() in MODE_SECTIONS:
+                        st.session_state.mode = argument.strip()
+                        st.success(f"Persona changed to {st.session_state.mode}.")
+                    else:
+                        st.info("Use /mode followed by one of: " + ", ".join(MODE_SECTIONS))
+                    return
+                if command == "/summarize":
+                    summary, warning = summarize_history(history)
+                    st.info(summary)
+                    if warning:
+                        st.session_state.last_error = warning
+                    return
+                if command == "/help":
+                    st.info("Commands: /mode [persona], /summarize, /help, /leave, /new")
+                    return
+                if command in {"/leave", "/disconnect"}:
+                    leave_room(st.session_state.user_id)
+                    st.session_state.room_id = None
+                    st.session_state.room_code = ""
+                    st.rerun()
+                if command == "/new":
+                    leave_room(st.session_state.user_id)
+                    st.session_state.user_id = uuid.uuid4().hex
+                    st.session_state.room_id = None
+                    st.session_state.room_code = ""
+                    st.rerun()
+                st.warning(f"Unknown command: {command}. Type /help for commands.")
                 return
             history = load_messages(room_id, st.session_state.user_id)
             with st.spinner("Decoding the subtext…"):
