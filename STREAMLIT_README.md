@@ -1,6 +1,6 @@
 # AI Chat Middleman — Streamlit
 
-This version runs from `streamlit_app.py`, keeps the supplied prompt asset unchanged, and supports a shared two-person lobby. Matching and messages are stored in a small SQLite database using WAL mode and transaction locks, so two browser sessions can safely find each other.
+This version runs from `streamlit_app.py`, keeps the supplied prompt asset unchanged, and supports a private two-person lobby. A host enters name, age, and gender, creates a six-character passcode, and shares it with one friend. The friend enters the passcode and joins the same room. Matching and messages are stored in a small SQLite database using WAL mode and transaction locks.
 
 ## Run locally
 
@@ -21,6 +21,6 @@ Without a Gemini key, the app stays usable with local fallback replies so the UI
 
 ## Shared chat notes
 
-The Streamlit deployment must use a persistent writable filesystem for the SQLite database. Streamlit Community Cloud provides this during a running app, but its local filesystem is not a permanent database across app restarts. For durable chat history, replace the SQLite functions with a hosted database.
+The Streamlit deployment must use a persistent writable filesystem for the SQLite database. Streamlit Community Cloud provides this during a running app, but its local filesystem is not a permanent database across app restarts. For durable lobby and chat history, replace the SQLite functions with a hosted database.
 
 The sidebar uses explicit dark-theme colors, so its labels, inputs, select box, and buttons remain visible when the app is in dark mode.

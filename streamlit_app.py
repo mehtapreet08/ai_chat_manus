@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import sqlite3
 import threading
 import uuid
@@ -56,12 +57,15 @@ def init_db() -> None:
         );
         CREATE TABLE IF NOT EXISTS rooms (
             room_id TEXT PRIMARY KEY,
+            passcode TEXT UNIQUE,
             created_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS members (
             room_id TEXT NOT NULL,
             user_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
+            age INTEGER NOT NULL DEFAULT 18,
+            gender TEXT NOT NULL DEFAULT 'other',
             FOREIGN KEY(room_id) REFERENCES rooms(room_id)
         );
         CREATE TABLE IF NOT EXISTS messages (
@@ -76,6 +80,16 @@ def init_db() -> None:
         );
         CREATE INDEX IF NOT EXISTS messages_room_idx ON messages(room_id, id);
         """)
+        # Migrate rooms created by the earlier automatic-matching version.
+        room_columns = {row["name"] for row in connection.execute("PRAGMA table_info(rooms)")}
+        member_columns = {row["name"] for row in connection.execute("PRAGMA table_info(members)")}
+        if "passcode" not in room_columns:
+            connection.execute("ALTER TABLE rooms ADD COLUMN passcode TEXT")
+        if "age" not in member_columns:
+            connection.execute("ALTER TABLE members ADD COLUMN age INTEGER NOT NULL DEFAULT 18")
+        if "gender" not in member_columns:
+            connection.execute("ALTER TABLE members ADD COLUMN gender TEXT NOT NULL DEFAULT 'other'")
+        connection.commit()
 
 
 def current_room(user_id: str) -> str | None:
@@ -84,27 +98,42 @@ def current_room(user_id: str) -> str | None:
         return row["room_id"] if row else None
 
 
-def join_lobby(user_id: str, name: str) -> str | None:
-    """Atomically match the oldest waiting user, or add this user to the queue."""
+def create_lobby(user_id: str, name: str, age: int, gender: str) -> tuple[str, str]:
+    """Create a private room and return its shareable six-character passcode."""
     clean_name = name.strip() or "Anonymous"
     with DB_LOCK, db() as connection:
         connection.execute("BEGIN IMMEDIATE")
-        existing = connection.execute("SELECT room_id FROM members WHERE user_id = ?", (user_id,)).fetchone()
-        if existing:
-            connection.commit()
-            return existing["room_id"]
-        connection.execute("INSERT OR REPLACE INTO waiting(user_id, name, joined_at) VALUES (?, ?, ?)", (user_id, clean_name, utc_now()))
-        partner = connection.execute("SELECT user_id, name FROM waiting WHERE user_id != ? ORDER BY joined_at LIMIT 1", (user_id,)).fetchone()
-        if not partner:
-            connection.commit()
-            return None
         room_id = uuid.uuid4().hex
-        connection.execute("INSERT INTO rooms(room_id, created_at) VALUES (?, ?)", (room_id, utc_now()))
-        connection.execute("INSERT INTO members(room_id, user_id, name) VALUES (?, ?, ?)", (room_id, user_id, clean_name))
-        connection.execute("INSERT INTO members(room_id, user_id, name) VALUES (?, ?, ?)", (room_id, partner["user_id"], partner["name"]))
-        connection.execute("DELETE FROM waiting WHERE user_id IN (?, ?)", (user_id, partner["user_id"]))
+        passcode = secrets.token_urlsafe(5).replace("-", "").replace("_", "")[:6].upper()
+        while connection.execute("SELECT 1 FROM rooms WHERE passcode = ?", (passcode,)).fetchone():
+            passcode = secrets.token_urlsafe(5).replace("-", "").replace("_", "")[:6].upper()
+        connection.execute("INSERT INTO rooms(room_id, passcode, created_at) VALUES (?, ?, ?)", (room_id, passcode, utc_now()))
+        connection.execute("INSERT INTO members(room_id, user_id, name, age, gender) VALUES (?, ?, ?, ?, ?)", (room_id, user_id, clean_name, age, gender))
         connection.commit()
-        return room_id
+        return room_id, passcode
+
+
+def join_lobby(user_id: str, passcode: str, name: str, age: int, gender: str) -> tuple[str | None, str | None]:
+    """Join a room by passcode atomically, rejecting invalid or full rooms."""
+    clean_code = passcode.strip().upper()
+    clean_name = name.strip() or "Anonymous"
+    with DB_LOCK, db() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        room = connection.execute("SELECT room_id FROM rooms WHERE passcode = ?", (clean_code,)).fetchone()
+        if not room:
+            connection.rollback()
+            return None, "Passcode not found. Ask the host to share the current code."
+        count = connection.execute("SELECT COUNT(*) AS count FROM members WHERE room_id = ?", (room["room_id"],)).fetchone()["count"]
+        existing = connection.execute("SELECT room_id FROM members WHERE user_id = ?", (user_id,)).fetchone()
+        if existing and existing["room_id"] == room["room_id"]:
+            connection.commit()
+            return room["room_id"], None
+        if count >= 2:
+            connection.rollback()
+            return None, "This lobby already has two people. Create a new lobby instead."
+        connection.execute("INSERT INTO members(room_id, user_id, name, age, gender) VALUES (?, ?, ?, ?, ?)", (room["room_id"], user_id, clean_name, age, gender))
+        connection.commit()
+        return room["room_id"], None
 
 
 def leave_room(user_id: str) -> None:
@@ -118,6 +147,17 @@ def get_partner(room_id: str, user_id: str) -> str:
     with DB_LOCK, db() as connection:
         row = connection.execute("SELECT name FROM members WHERE room_id = ? AND user_id != ? LIMIT 1", (room_id, user_id)).fetchone()
         return row["name"] if row else "your partner"
+
+
+def room_passcode(room_id: str) -> str:
+    with DB_LOCK, db() as connection:
+        row = connection.execute("SELECT passcode FROM rooms WHERE room_id = ?", (room_id,)).fetchone()
+        return row["passcode"] if row and row["passcode"] else ""
+
+
+def room_member_count(room_id: str) -> int:
+    with DB_LOCK, db() as connection:
+        return int(connection.execute("SELECT COUNT(*) AS count FROM members WHERE room_id = ?", (room_id,)).fetchone()["count"])
 
 
 def load_messages(room_id: str, viewer_id: str) -> list[dict[str, str]]:
@@ -183,7 +223,7 @@ def generate_reply(text: str, mode: str, history: list[dict[str, str]]) -> tuple
     context = "\n".join(f"{item['role']}: {item['content']}" for item in history[-8:])
     system = f"You are the AI Chat Middleman. Follow this prompt exactly:\n\n{PROMPTS.get(mode, PROMPTS['Whisperer'])}\n\nConversation context:\n{context}\n\nReturn only the transformed reply. Keep it short and natural."
     try:
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=text, config=types.GenerateContentConfig(system_instruction=system, temperature=0.85, max_output_tokens=500))
+        response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=text, config=types.GenerateContentConfig(system_instruction=system, temperature=0.85, max_output_tokens=500))
         reply = (response.text or "").strip()
         if reply:
             return reply, None
@@ -195,8 +235,12 @@ def generate_reply(text: str, mode: str, history: list[dict[str, str]]) -> tuple
 def init_state() -> None:
     st.session_state.setdefault("user_id", uuid.uuid4().hex)
     st.session_state.setdefault("name", "")
+    st.session_state.setdefault("age", 18)
+    st.session_state.setdefault("gender", "Other")
     st.session_state.setdefault("mode", "Whisperer")
     st.session_state.setdefault("room_id", None)
+    st.session_state.setdefault("room_code", "")
+    st.session_state.setdefault("lobby_error", None)
     st.session_state.setdefault("last_error", None)
 
 
@@ -238,9 +282,11 @@ def main() -> None:
         st.markdown("## Chat settings")
         name = st.text_input("Your name", value=st.session_state.name, placeholder="Optional", key="name_input")
         st.session_state.name = name.strip() or "Anonymous"
+        st.session_state.age = st.number_input("Your age", min_value=13, max_value=100, value=int(st.session_state.age), step=1)
+        st.session_state.gender = st.selectbox("Your gender", ["Female", "Male", "Other"], index=["Female", "Male", "Other"].index(st.session_state.gender))
         selected_mode = st.selectbox("AI persona", list(MODE_SECTIONS), index=list(MODE_SECTIONS).index(st.session_state.mode), key="mode_select")
         st.session_state.mode = selected_mode
-        st.caption("Two people can join the same live lobby. Messages are shared through the app's SQLite state.")
+        st.caption("Create a private lobby and share its passcode with one friend.")
         if st.button("Leave chat", use_container_width=True):
             leave_room(st.session_state.user_id)
             st.session_state.room_id = None
@@ -251,20 +297,49 @@ def main() -> None:
             st.session_state.room_id = None
             st.rerun()
 
-    st.markdown(f"<div class='hero'><h1>✨ AI Chat Middleman</h1><p>Two-way live chat · {st.session_state.mode} · {st.session_state.name}</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='hero'><h1>✨ AI Chat Middleman</h1><p>Private two-way chat · {st.session_state.mode} · {st.session_state.name}</p></div>", unsafe_allow_html=True)
+
+    if not st.session_state.room_id:
+        create_tab, join_tab = st.tabs(["Create lobby", "Join with passcode"])
+        with create_tab:
+            st.markdown("### Start a private chat")
+            st.write("Create a room, then send the six-character passcode to your friend.")
+            if st.button("Create lobby", type="primary", use_container_width=True):
+                room_id, code = create_lobby(st.session_state.user_id, st.session_state.name, int(st.session_state.age), st.session_state.gender)
+                st.session_state.room_id = room_id
+                st.session_state.room_code = code
+                st.session_state.lobby_error = None
+                st.rerun()
+            if st.session_state.room_code:
+                st.code(st.session_state.room_code, language=None)
+                st.caption("Share this code with exactly one friend.")
+        with join_tab:
+            st.markdown("### Join a friend's lobby")
+            join_code = st.text_input("Passcode", max_chars=6, placeholder="Example: A7K2QZ").strip().upper()
+            if st.button("Join lobby", use_container_width=True):
+                room_id, error = join_lobby(st.session_state.user_id, join_code, st.session_state.name, int(st.session_state.age), st.session_state.gender)
+                if room_id:
+                    st.session_state.room_id = room_id
+                    st.session_state.room_code = join_code
+                    st.session_state.lobby_error = None
+                    st.rerun()
+                st.session_state.lobby_error = error
+            if st.session_state.lobby_error:
+                st.error(st.session_state.lobby_error)
+        st.stop()
+
+    if st.session_state.room_code:
+        st.markdown(f"<div class='status-card'>Share this lobby passcode with your friend: <strong>{st.session_state.room_code}</strong></div>", unsafe_allow_html=True)
 
     @st.fragment(run_every="2s")
     def live_chat() -> None:
-        room_id = current_room(st.session_state.user_id) or st.session_state.room_id
-        if not room_id:
-            room_id = join_lobby(st.session_state.user_id, st.session_state.name)
-            st.session_state.room_id = room_id
-        if not room_id:
-            st.markdown("<div class='status-card'>Waiting for a second person… Keep this page open; matching happens automatically.</div>", unsafe_allow_html=True)
-            return
-
+        room_id = st.session_state.room_id
         partner = get_partner(room_id, st.session_state.user_id)
-        st.success(f"Connected with {partner}. Send a message below.")
+        member_count = room_member_count(room_id)
+        if member_count < 2:
+            st.info(f"Lobby created. Share passcode **{room_passcode(room_id)}** with your friend. Waiting for them to join…")
+        else:
+            st.success(f"Connected with {partner}. Send a message below.")
         for item in load_messages(room_id, st.session_state.user_id):
             render_message(item)
 
