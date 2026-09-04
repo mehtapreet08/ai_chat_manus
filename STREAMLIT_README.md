@@ -1,0 +1,20 @@
+# AI Chat Middleman — Streamlit
+
+This version runs from `streamlit_app.py` and keeps the supplied prompt asset unchanged.
+
+## Run locally
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+## Deploy on Streamlit Community Cloud
+
+1. Push this project to a GitHub repository.
+2. Open [share.streamlit.io](https://share.streamlit.io/).
+3. Choose the repository and set the main file to `streamlit_app.py`.
+4. Add `GEMINI_API_KEY` under **Advanced settings → Secrets** if AI responses should use Gemini.
+5. Deploy.
+
+Without a Gemini key, the app stays usable with local fallback replies so the UI and prompt modes can still be tested.

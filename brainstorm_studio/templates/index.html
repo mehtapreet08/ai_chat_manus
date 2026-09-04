@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent Brainstorm Studio</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body class="dark-mode">
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Brainstorm Studio</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <button id="btn-new-session" class="nav-btn">New Session</button>
+                <div class="session-list" id="session-list">
+                    <!-- Session items will be injected here -->
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <input type="file" id="import-file" hidden accept=".json">
+                <button id="btn-import" class="nav-btn">Import JSON</button>
+                <button id="btn-export" class="nav-btn">Export JSON</button>
+                <button id="btn-toggle-theme" class="nav-btn">Toggle Theme</button>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area">
+            <div class="lanes-container">
+                <!-- User Lane -->
+                <div class="chat-lane lane-user">
+                    <div class="lane-header">
+                        <h3>You</h3>
+                    </div>
+                    <div class="lane-content" id="lane-user-content"></div>
+                </div>
+
+                <!-- Analyst Lane -->
+                <div class="chat-lane lane-analyst">
+                    <div class="lane-header">
+                        <h3>Analyst 📊</h3>
+                    </div>
+                    <div class="lane-content" id="lane-analyst-content"></div>
+                </div>
+
+                <!-- Visionary Lane -->
+                <div class="chat-lane lane-visionary">
+                    <div class="lane-header">
+                        <h3>Visionary 🚀</h3>
+                    </div>
+                    <div class="lane-content" id="lane-visionary-content"></div>
+                </div>
+
+                <!-- Realist Lane -->
+                <div class="chat-lane lane-realist">
+                    <div class="lane-header">
+                        <h3>Realist ⚠️</h3>
+                    </div>
+                    <div class="lane-content" id="lane-realist-content"></div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-area">
+                <textarea id="user-input" placeholder="Type your idea here... (Enter to send, Shift+Enter for new line)"></textarea>
+                <button id="btn-send">Send</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>

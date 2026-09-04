@@ -1,0 +1,147 @@
+we want a tool written in an easily maintainable code stack that does the following 
+
+1. exactly similar chat based mechanism to whatsapp 
+2. facility to exchange messages but with one change:
+for example i send a message to someone then the message is actually sent to ai via gemini api call
+
+all chats are temporary screenshots allowed user is not currently allowed to add a profile pic and ai responds in less than 150 words
+
+any edge case or additional fun features you can think of before we jump on to development ​
+
+use the above options with different prompt styles
+
+
+
+
+
+
+
+
+
+
+Here are several AI prompt templates for the "Chat Middleman Interpreter" persona, each with its own mischievous flavor. These can be used to instruct another AI to behave in that style.
+🔄 Core Prompt: Interpretive Chat Middleman
+Prompt Name: The Chat Middleman Whisperer
+Prompt Template:
+You are the Chat Middleman. You never relay a message directly. You reinterpret, analyze subtext, guess the sender’s hidden intentions, emotional state, and unspoken desires. You deliver the message as if you are a spokesperson who adds nuance, speculation, and tone-shifts. You always speak as though you are saying the message on behalf of the original sender, not as yourself. Add clever, subtle reinterpretations, even if they were not explicitly stated.
+🌀 Chinese Whisper Chaos Mode
+Prompt Name: The Chaotic Telephone Game
+Prompt Template:
+You are the Chinese Whisper AI Middleman. Every message must be twisted, misheard, misunderstood, exaggerated, or accidentally scrambled. Add confusion, drama, or random substitutions, while trying to sound like you're still delivering the original message. It should be recognizable… but barely. Like a rumor passed through ten gossipy grandmas.
+🕯 Creepy / Eerie Interpretation Mode
+Prompt Name: The Velvet Shadows Messenger
+Prompt Template:
+You interpret and deliver every message as if it carries eerie undertones, hidden obsessions, whispered secrets, or unsettling implications. Speak slowly, poetically, with an ominous calm. Everything feels like it has a dark, lingering meaning.
+💘 Romantic Interpretation Mode
+Prompt Name: Courier of Unspoken Longing
+Prompt Template:
+
+😏 Flirty Interpretation ModePrompt Name: The Wink-and-Whisper MessengerPrompt Template:Interpret all messages as if the sender is charming, playful, and mildly seductive. Add winks, teasing lines, compliments, and an effortless charismatic tone. The message should feel like a warm smirk turned into words.😂 Humor / Comedy ModePrompt Template:You reinterpret every message as if it were written by a comedic trickster. Add jokes, absurd comparisons, unexpected punchlines, and playful exaggeration. Your delivery should feel like you're trying to make everyone laugh, even if the original message was boring.and then the response to ai is directly sent to user - where sending party can see what the ai sent 
+
+To build the “Chat Middleman Interpreter” tool you described—a chat-based application similar to WhatsApp but with AI-driven message transformation via Gemini API—you’ll want a modern, maintainable stack and clear definition for rules, edge cases, and extra features. Here’s a breakdown addressing each point and suggesting additional ideas to make your project robust and creative. 
+
+Recommended Tech Stack
+For easy upkeep, scalability, and fast AI integration:
+
+Frontend: React (for real-time chat UI, screenshot handling, restrictions)
+
+Backend: Node.js with Express (API calls, temporary chat session management)
+
+Database: Redis (ideal for storing temporary chat data; chats auto-expire)
+
+AI Integration: Direct calls to Google Gemini API via backend routes
+
+Screenshots: Use html2canvas for client-side screenshot capture
+
+Authentication: Simple anonymous sessions (since there’s no profile pic)
+
+Core Logic & Features
+Chat UI: Looks/feels like WhatsApp but restricts persistent data and avatar uploads.
+
+Message Relay: All outgoing messages route to Gemini AI, which interprets/responds per the chosen persona prompt template.
+
+Response Limit: AI answers are capped at 150 words.
+
+Session Management: All chats are temporary. Data is wiped on disconnect/logoff or after a set time.
+
+Screenshot: Users can take screenshot of current chat thread.
+
+Access Control: No user profiles, usernames are generated or session-based.
+
+Visibility: Sender can see both what was sent and how the AI transformed/answered.
+
+Prompt Style Feature Switching
+Users or the app admin can select different “interpretation modes” for the Chat Middleman persona:
+
+Whisperer, Chaos Mode, Creepy, Romantic, Flirty, Humor, etc.
+
+Edge Cases & Fun Features
+Edge Cases
+Profanity or Spam: Messages flagged for content are given a “mischievous” or “subtle correction” by the middleman rather than refusal.
+
+Unusually Short/Long Messages: Short messages get expanded to fit the persona; overly long ones get succinct reinterpretations.
+
+Rapid Fire/Spam: Burst messaging triggers a playful AI “timeout” reply (e.g., “Slow down, secret agent!”).
+
+Empty Messages: AI generates a quirky reaction (e.g., “A silent whisper hangs in the digital air…”).
+
+Additional Fun Features
+Emoji Translation: All emojis get reinterpreted and described as part of the AI’s reply.
+
+Random “Secret” Reveals: Occasionally, the AI invents a harmless secret about the sender (“I sense you’re craving pizza tonight…”).
+
+Chat “Theme” of the Day: Rotate the persona based on day/time for added playfulness.
+
+Easter Eggs: Hidden commands trigger unique persona responses (“/whisper”, “/chaos”).
+
+Memory Snapshots: On screenshot, AI adds a fun annotation or summary (“This moment smells like adventure!”).
+
+“Reverse” Mode: User can see both the original message and Gemini’s creative “Chinese Whisper” along with AI’s response.
+
+Accessibility: Everything works equally well on mobile/web—no signup friction.
+
+Example Flow
+User sends: “Hey, how are you?”
+
+Frontend relays to backend, backend sends prompt + persona instruction to Gemini API.
+
+Gemini API transforms (“The Whisperer” reply: “On behalf of my companion, I bring gentle greetings and earnest curiosity about your wellbeing today…”).
+
+AI response comes back: “I, their messenger, sense they really hope you’re doing well. Perhaps they miss something about your smile this morning.”
+
+Response is shown to receiving party; sender sees this reply as well.
+
+This approach makes for a flexible, easy-to-maintain app with room for creative expansion and playful abuse prevention. Each persona prompt can inject endless personality, and features like screenshot annotation and theme days will keep engagement high.
+
+no new frameworks html java css etc which are very compatible for a non techie use them...
+
+the sessions must only start when there are two connected people
+
+screenshot can be handled by user devices we need not add a seperate support 
+
+sender cannot see what was sent once he accepted the ai response 
+
+Profanity or Spam: Messages flagged for content are given a “mischievous” or “subtle correction” by the middleman rather than refusal. yes
+
+Unusually Short/Long Messages: Short messages get expanded to fit the persona; overly long ones get succinct reinterpretations minimum message of 10 words are required to be sent by user
+
+Rapid Fire/Spam: Burst messaging triggers a playful AI “timeout” reply (e.g., “Slow down, secret agent!”).
+
+ yes ofcourse 10 sec wait between each message 
+
+Empty Messages: AI generates a quirky reaction (e.g., “A silent whisper hangs in the digital air…”).
+not necessarily quirky...but depends on mode selected 
+
+Emoji Translation: All emojis get reinterpreted and described as part of the AI’s reply. yes
+
+Random “Secret” Reveals: Occasionally, the AI invents a harmless secret about the sender (“I sense you’re craving pizza tonight…”). yes based on the message context
+
+the mode is selected by user inside the chat by /mode and a radio button list with submit button appears
+
+primarily designed to work on mobile screens
+
+begin making it in the context of whole chat and gemini api key is stored in environment variable as Gemini_API_key
+
+and add a summarize feature where ai is sent whole chat to summarize....where a summary message exists and it had not been sent to ai send to ai with next message
+
+is it made well? by 2 users i mean two real users not user and ai
